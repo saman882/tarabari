@@ -6,6 +6,15 @@ const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SE
 });
 const OSRM = Deno.env.get("OSRM_URL") ?? "https://router.project-osrm.org";
 const NOMINATIM = "https://nominatim.openstreetmap.org";
+const PHOTON = "https://photon.komoot.io";
+// deno-lint-ignore no-explicit-any
+const photonPlace = (f: any) => {
+  const p = f.properties ?? {};
+  const name = p.name ?? p.street ?? p.city ?? "";
+  const address = [p.name, p.street && p.housenumber ? `${p.street} ${p.housenumber}` : p.street, p.district, p.city, p.county, p.state]
+    .filter((x, i, a) => x && a.indexOf(x) === i).join("، ");
+  return { name, address, lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] };
+};
 const UA = "tarabari-app/1.0 (github.com/saman882/tarabari)";
 
 const cors = {
@@ -31,7 +40,7 @@ const coordStr = (ps: P[]) => ps.map(([la, ln]) => `${ln.toFixed(6)},${la.toFixe
 
 async function getJson(url: string, timeoutMs = 20000) {
   const r = await fetch(url, { headers: { "User-Agent": UA, "Accept-Language": "fa,en" }, signal: AbortSignal.timeout(timeoutMs) });
-  if (!r.ok) throw new HttpError(502, `سرویس نقشه پاسخ نداد (${r.status})`);
+  if (!r.ok) { console.warn("upstream", r.status, url.slice(0, 80)); throw new HttpError(502, `سرویس نقشه پاسخ نداد (${r.status})`); }
   return await r.json();
 }
 
@@ -64,17 +73,26 @@ Deno.serve(async (req) => {
       case "search": {
         const q = String(b.q ?? "").trim().slice(0, 200);
         if (q.length < 2) return json(200, { results: [] });
-        const d = await getJson(`${NOMINATIM}/search?format=jsonv2&limit=8&countrycodes=ir&q=${encodeURIComponent(q)}`, 10000);
-        return json(200, {
-          results: d.map((x: { display_name: string; lat: string; lon: string; name?: string }) => ({
-            name: x.name || x.display_name.split(",")[0], address: x.display_name, lat: +x.lat, lng: +x.lon,
-          })),
-        });
+        try {
+          const d = await getJson(`${NOMINATIM}/search?format=jsonv2&limit=8&countrycodes=ir&q=${encodeURIComponent(q)}`, 8000);
+          if (Array.isArray(d) && d.length) return json(200, {
+            results: d.map((x: { display_name: string; lat: string; lon: string; name?: string }) => ({
+              name: x.name || x.display_name.split(",")[0], address: x.display_name, lat: +x.lat, lng: +x.lon,
+            })),
+          });
+        } catch (e) { console.warn("nominatim search failed", String(e)); }
+        const p = await getJson(`${PHOTON}/api/?limit=8&bbox=44,25,63.5,40&q=${encodeURIComponent(q)}`, 10000);
+        return json(200, { results: (p.features ?? []).map(photonPlace) });
       }
       case "reverse": {
-        const [p] = points([[b.lat, b.lng]], 1, 1);
-        const d = await getJson(`${NOMINATIM}/reverse?format=jsonv2&zoom=17&lat=${p[0]}&lon=${p[1]}`, 10000);
-        return json(200, { address: d.display_name ?? "", city: d.address?.city ?? d.address?.town ?? d.address?.county ?? "" });
+        const [pt] = points([[b.lat, b.lng]], 1, 1);
+        try {
+          const d = await getJson(`${NOMINATIM}/reverse?format=jsonv2&zoom=17&lat=${pt[0]}&lon=${pt[1]}`, 8000);
+          if (d.display_name) return json(200, { address: d.display_name, city: d.address?.city ?? d.address?.town ?? d.address?.county ?? "" });
+        } catch (e) { console.warn("nominatim reverse failed", String(e)); }
+        const p = await getJson(`${PHOTON}/reverse?lat=${pt[0]}&lon=${pt[1]}`, 10000);
+        const f = p.features?.[0];
+        return json(200, f ? { address: photonPlace(f).address, city: f.properties.city ?? f.properties.county ?? "" } : { address: "", city: "" });
       }
       default:
         throw new HttpError(400, "درخواست نامعتبر");
