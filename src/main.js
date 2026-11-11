@@ -18,7 +18,7 @@ function shell(profile) {
   const sup = profile.role === 'supervisor';
   app.innerHTML = `
     <header class="topbar">
-      <a class="brand" href="#"><img src="./icon.svg" alt="" width="28" height="28"> ترابری</a>
+      <a class="brand" href="#"><img src="./icon.svg" alt="" width="28" height="28"> رویای بیتا</a>
       ${sup ? `<nav class="tabs"><a href="#live">نقشه‌ی زنده</a><a href="#trips">سفرها</a><a href="#drivers">راننده‌ها</a><a href="#stores">فروشگاه‌ها</a></nav>` : ''}
       <div class="user"><span>${esc(profile.full_name)}<small>${sup ? 'سرپرست' : 'راننده'}</small></span><button class="btn sm ghost" data-logout>خروج</button></div>
     </header>
@@ -32,7 +32,7 @@ async function loginScreen() {
   window.onhashchange = null;
   app.innerHTML = `<div class="login"><form class="login-card">
     <img src="./icon.svg" alt="" width="56" height="56">
-    <h1>ترابری</h1><p class="muted">مسیریابی چندمقصدی و ردیابی راننده‌ها</p>
+    <h1>رویای بیتا</h1><p class="muted">مسیریابی چندمقصدی و ردیابی راننده‌ها</p>
     <div id="boot-note"></div>
     <label>نام کاربری<input name="username" required dir="ltr" autocomplete="username" autocapitalize="off"></label>
     <label>رمز عبور<input name="password" type="password" required dir="ltr" autocomplete="current-password"></label>
